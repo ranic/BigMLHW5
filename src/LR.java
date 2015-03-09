@@ -18,7 +18,7 @@ public class LR {
 
     /* Map from label to a map from word position to a parameter weight for that position */
     private static HashMap<String, HashMap<Integer, Double>> params = new HashMap<String, HashMap<Integer, Double>>();
-    
+
 
     /* Create a parameter HashMap for each label */
     private static void initParams() {
@@ -65,10 +65,9 @@ public class LR {
         }
     }
 
-    /* Returns e^(Bt*x)/(1 + e^(Bt*x)) */
-    static double getPFromDotProd(double dotProd) {
-        double exp = Math.exp(dotProd);
-        return exp/(1.0 + exp);
+    /* Computes the sigmoid function of the input */
+    static double sigmoid(double x) {
+        return 1.0/(1.0 + Math.exp(-x));
     }
 
 
@@ -79,14 +78,14 @@ public class LR {
         for (String label : labelFilterArray) {
             double dotProd = 0.0;
             B = params.get(label);
-            for (int i = 0; i < doc.size(); i++) {
-                String token = doc.get(i);
-                if (B.containsKey(i)) {
-                    dotProd += computeTokenID(token) * B.get(i);
+            for (String token : doc) {
+                int id = computeTokenID(token);
+                if (B.containsKey(id)) {
+                    dotProd += B.get(id);
                 }
             }
 
-            result.put(label, getPFromDotProd(dotProd));
+            result.put(label, sigmoid(dotProd));
         }
         return result;
     }
@@ -97,7 +96,7 @@ public class LR {
             HashMap<String, Double> p;
             HashMap<Integer, Double> B;
             double pLabel;
-            String token;
+            int id;
             BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
 
             String line;
@@ -107,22 +106,22 @@ public class LR {
                 Set<String> labels = filterLabels(pair[0].split(","));
                 Vector<String> tokens = tokenizeDoc(pair[1]);
 
-                // Recompute p at the start of every example
+                // Recompute p for all labels at the start of every example
                 p = computeP(tokens);
 
+                // Each label is a separate classifier, so treat all separately
                 for (String label : labelFilterArray) {
                     B = params.get(label);
                     pLabel = p.get(label);
                     int y = (labels.contains(label)) ? 1 : 0;
 
-                    for (int j = 0; j < tokens.size(); j++) {
-                        int x_j = computeTokenID(tokens.get(j));
+                    for (String token : tokens) {
+                        id = computeTokenID(token);
+                        if (!B.containsKey(id)) {
+                            B.put(id, 0.0);
+                        }
 
-                        if (!B.containsKey(j))
-                            B.put(j, 0.0);
-
-                        /* Bj = Bj + learnRate * (y - p) * x_i */
-                        B.put(j, B.get(j) + learnRate * (y - pLabel) * x_j);
+                        B.put(id, B.get(id) + learnRate * (y - pLabel));
                     }
                 }
             }
