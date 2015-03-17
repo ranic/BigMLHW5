@@ -7,15 +7,15 @@ import java.util.*;
  * Created by vijay on 3/8/15.
  */
 public class LR {
-    /* Default values for learning parameters */
-    private static int vocabSize = 10000;
-    private static double learnRate = 0.5;
-    private static double regularization = 0.1;
-    private static int maxPasses = 20;
-    private static int trainingSize = 11272;
+    /* Default values for learning parameters. Set in main */
+    private static int vocabSize;
+    private static double learnRate;
+    private static double regularization;
+    private static int maxPasses;
+    private static int trainingSize;
     private static final String[] labelArray = {"nl","el","ru","sl","pl","ca","fr","tr","hu","de","hr","es","ga","pt"};
-
     private static double lambda = learnRate;
+    private static double regularizationBase = 1.0 - 2*lambda*regularization;
 
     private static HashMap<String, Map<Integer, Integer>> A_PER_LABEL = new HashMap<String, Map<Integer, Integer>>();
     private static HashMap<String, Map<Integer, Double>> B_PER_LABEL = new HashMap<String, Map<Integer, Double>>();
@@ -50,9 +50,7 @@ public class LR {
         double dotProd = 0.0;
         for (String token : doc) {
             int id = getFeatureID(token);
-            if (B.containsKey(id)) {
-                dotProd += B.get(id);
-            }
+            dotProd += B.get(id);
         }
         return Utils.sigmoid(dotProd);
     }
@@ -67,7 +65,7 @@ public class LR {
             A = A_PER_LABEL.get(label);
             B = B_PER_LABEL.get(label);
             for (int j = 0; j < vocabSize; j++) {
-                double regularizationFactor = Math.pow(1.0 - 2 * lambda * regularization, k - A.get(j));
+                double regularizationFactor = Math.pow(regularizationBase, k - A.get(j));
                 B.put(j, B.get(j) * regularizationFactor);
             }
         }
@@ -81,7 +79,6 @@ public class LR {
 
         return featureIDs;
     }
-
 
     public static void train() throws Exception {
         int k = 0;
@@ -100,7 +97,9 @@ public class LR {
             if (k % trainingSize == 0) {
                 t++;
                 lambda = learnRate/(t*t);
-                System.err.println(sum);
+                regularizationBase = 1.0 - 2*lambda*regularization;
+                //System.err.println("Iteration " + t);
+                //System.err.println(sum);
                 sum = 0.0;
             }
             k++;
@@ -120,7 +119,7 @@ public class LR {
 
                 for (int j = 0; j < vocabSize; j++) {
                     if (tokenIDs.contains(j)) {
-                        double regularizationFactor = Math.pow(1.0 - 2 * lambda * regularization, k - A.get(j));
+                        double regularizationFactor = Math.pow(regularizationBase, k - A.get(j));
                         B.put(j, B.get(j) + lambda * (y - p));
                         B.put(j, B.get(j) * regularizationFactor);
                         A.put(j, k);
@@ -130,8 +129,8 @@ public class LR {
         }
 
         cleanupTrain(k);
-
-        System.err.println(sum);
+        br.close();
+        //System.err.println(sum);
     }
 
     private static double computeLabelScore(Vector<String> tokens, String label) {
@@ -149,17 +148,30 @@ public class LR {
         BufferedReader br = new BufferedReader(new FileReader(testFilename));
         String line;
         Vector<String> tokens;
+        int correct = 0;
+        int total = 0;
 
         while ((line = br.readLine()) != null) {
-            tokens = Utils.tokenizeDoc(line.split("\t")[1]);
+            String[] pair = line.split("\t");
+            Set<String> labels = new HashSet<String>(Arrays.asList(pair[0].split(",")));
+            tokens = Utils.tokenizeDoc(pair[1]);
 
             for (String label : labelArray) {
                 double score = computeLabelScore(tokens, label);
+                // Increment correct count if score correctly classifies label
+                boolean truePositive = (score > 0.5) && labels.contains(label);
+                boolean trueNegative = (score < 0.5) && !labels.contains(label);
+                if (truePositive || trueNegative)
+                    correct++;
                 System.out.print(label + " " + score + ", ");
             }
+            total += labelArray.length;
 
             System.out.println();
         }
+
+        System.err.println(vocabSize + ": Accuracy: " + ((double) correct)/total);
+        br.close();
     }
 
     public static void main(String[] args) throws Exception {
@@ -173,6 +185,7 @@ public class LR {
         regularization = Double.valueOf(args[2]);
         maxPasses = Integer.valueOf(args[3]);
         trainingSize = Integer.valueOf(args[4]);
+
 
         String testFile = args[5];
         initMaps();
